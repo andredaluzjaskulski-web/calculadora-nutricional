@@ -3,13 +3,13 @@ import pandas as pd
 
 # Configuração da página
 st.set_page_config(
-    page_title="Calculadora Nutricional",
+    page_title="Calculadora Nutricional - Foco em Glúten",
     page_icon="🧮",
     layout="wide"
 )
 
 st.title("🧮 Calculadora Nutricional")
-st.write("Gerencie dados, alimentos e monte refeições personalizadas.")
+st.write("Gerencie dados, alimentos e monte refeições com controle de sensibilidade ao glúten.")
 
 # Inicialização do estado da sessão (banco de dados em memória)
 if "dados_pessoa" not in st.session_state:
@@ -39,20 +39,32 @@ with aba1:
     idade = st.number_input("Idade:", min_value=0, step=1, value=st.session_state.dados_pessoa.get("idade", 0))
     peso = st.number_input("Peso (kg):", min_value=0.0, step=0.1, value=st.session_state.dados_pessoa.get("peso", 0.0))
     altura = st.number_input("Altura (cm):", min_value=0.0, step=1.0, value=st.session_state.dados_pessoa.get("altura", 0.0))
-    restricoes = st.text_area("Restrições alimentares:", value=st.session_state.dados_pessoa.get("restricoes", ""))
+    
+    # Restrição específica para Glúten
+    tem_gluten_sensibilidade = st.selectbox(
+        "Possui sensibilidade ou intolerância ao Glúten?",
+        options=["Não", "Sim"],
+        index=1 if st.session_state.dados_pessoa.get("sensivel_gluten", False) else 0
+    )
+    
+    outras_restricoes = st.text_area(
+        "Outras restrições ou observações (opcional):", 
+        value=st.session_state.dados_pessoa.get("outras_restricoes", "")
+    )
 
     if st.button("Salvar Dados da Pessoa", type="primary"):
         if not nome.strip():
             st.warning("⚠️ Informe o nome.")
         elif peso <= 0 or altura <= 0:
-            st.warning("⚠️️ Informe peso e altura válidos.")
+            st.warning("⚠️ Informe peso e altura válidos.")
         else:
             st.session_state.dados_pessoa = {
                 "nome": nome.strip(),
                 "idade": idade,
                 "peso": peso,
                 "altura": altura,
-                "restricoes": restricoes.strip()
+                "sensivel_gluten": (tem_gluten_sensibilidade == "Sim"),
+                "outras_restricoes": outras_restricoes.strip()
             }
             st.success("✅ Dados salvos com sucesso!")
 
@@ -63,7 +75,7 @@ with aba2:
     st.header("Cadastrar Alimento")
     st.caption("Informe os valores nutricionais referentes a **100 g** do alimento.")
 
-    nome_alim = st.text_input("Nome do alimento:", placeholder="Ex.: Arroz")
+    nome_alim = st.text_input("Nome do alimento:", placeholder="Ex.: Arroz integral ou Pão de Forma")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -73,7 +85,9 @@ with aba2:
     with col2:
         proteinas = st.number_input("Proteínas (g):", min_value=0.0, step=0.1)
         gorduras = st.number_input("Gorduras (g):", min_value=0.0, step=0.1)
-        restricao_alim = st.text_input("Restrição/Alergênico:", placeholder="Ex.: lactose")
+        
+        # Campo para marcar presença de glúten
+        contem_gluten = st.checkbox("⚠️ Este alimento contém GLÚTEN?", value=False)
 
     if st.button("Cadastrar Alimento", type="primary"):
         if not nome_alim.strip():
@@ -87,13 +101,25 @@ with aba2:
                 "carboidratos": carboidratos,
                 "gorduras": gorduras,
                 "fibras": fibras,
-                "restricao": restricao_alim.strip()
+                "contem_gluten": contem_gluten
             }
             st.success(f"✅ Alimento '{nome_alim}' cadastrado!")
 
     st.subheader("Alimentos Cadastrados")
     if st.session_state.alimentos:
-        df_alimentos = pd.DataFrame(st.session_state.alimentos.values())
+        # Formata a tabela para exibição amigável
+        lista_exibicao = []
+        for item in st.session_state.alimentos.values():
+            lista_exibicao.append({
+                "Nome": item["nome"],
+                "Kcal": item["calorias"],
+                "Proteínas (g)": item["proteinas"],
+                "Carboidratos (g)": item["carboidratos"],
+                "Gorduras (g)": item["gorduras"],
+                "Fibras (g)": item["fibras"],
+                "Contém Glúten": "🔴 SIM" if item["contem_gluten"] else "🟢 NÃO"
+            })
+        df_alimentos = pd.DataFrame(lista_exibicao)
         st.dataframe(df_alimentos, use_container_width=True)
     else:
         st.info("Nenhum alimento cadastrado ainda.")
@@ -126,7 +152,8 @@ with aba3:
                     "proteinas": alimento["proteinas"] * fator,
                     "carboidratos": alimento["carboidratos"] * fator,
                     "gorduras": alimento["gorduras"] * fator,
-                    "fibras": alimento["fibras"] * fator
+                    "fibras": alimento["fibras"] * fator,
+                    "contem_gluten": alimento["contem_gluten"]
                 })
                 st.success(f"Adicionado: {qtd}g de {alimento['nome']}")
 
@@ -143,7 +170,19 @@ with aba3:
 
         st.subheader("Alimentos na Refeição Atual")
         if st.session_state.refeicao:
-            df_refeicao = pd.DataFrame(st.session_state.refeicao)
+            lista_refeicao = []
+            for item in st.session_state.refeicao:
+                lista_refeicao.append({
+                    "Alimento": item["nome"],
+                    "Qtd (g)": item["quantidade"],
+                    "Kcal": round(item["calorias"], 1),
+                    "Prot (g)": round(item["proteinas"], 1),
+                    "Carb (g)": round(item["carboidratos"], 1),
+                    "Gord (g)": round(item["gorduras"], 1),
+                    "Fibra (g)": round(item["fibras"], 1),
+                    "Glúten": "🔴 SIM" if item["contem_gluten"] else "🟢 NÃO"
+                })
+            df_refeicao = pd.DataFrame(lista_refeicao)
             st.dataframe(df_refeicao, use_container_width=True)
         else:
             st.info("Nenhum alimento adicionado à refeição.")
@@ -168,7 +207,24 @@ with aba4:
         }
 
         nome_pessoa = st.session_state.dados_pessoa.get("nome", "Não informado")
+        sensivel_gluten = st.session_state.dados_pessoa.get("sensivel_gluten", False)
+        
         st.subheader(f"Resumo para: {nome_pessoa}")
+
+        # Checagem de Glúten na refeição
+        alimentos_com_gluten = [item["nome"] for item in st.session_state.refeicao if item["contem_gluten"]]
+
+        if sensivel_gluten:
+            if alimentos_com_gluten:
+                st.error(
+                    f"🚨 **ALERTA DE GLÚTEN:** Esta pessoa possui **sensibilidade/intolerância ao glúten**, "
+                    f"mas a refeição contém o(s) seguinte(s) alimento(s) com glúten: **{', '.join(alimentos_com_gluten)}**!"
+                )
+            else:
+                st.success("🟢 **REFEIÇÃO SEGURA:** Nenhum alimento com glúten foi identificado nesta refeição.")
+        else:
+            if alimentos_com_gluten:
+                st.info(f"ℹ️ Esta refeição contém alimento(s) com glúten: {', '.join(alimentos_com_gluten)}.")
 
         # Exibição de métricas em cartões
         col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
@@ -178,5 +234,5 @@ with aba4:
         col_m4.metric("Gorduras", f"{totais['Gorduras (g)']:.1f} g")
         col_m5.metric("Fibras", f"{totais['Fibras (g)']:.1f} g")
 
-        if st.session_state.dados_pessoa.get("restricoes"):
-            st.warning(f"⚠️️ Restrições da pessoa: {st.session_state.dados_pessoa['restricoes']}")
+        if st.session_state.dados_pessoa.get("outras_restricoes"):
+            st.caption(f"Outras restrições cadastradas: {st.session_state.dados_pessoa['outras_restricoes']}")
